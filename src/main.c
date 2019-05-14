@@ -1,14 +1,13 @@
 #include <SDL.h>
-#include <SDL_image.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 
 #define WINDOW_WIDTH  1280
 #define WINDOW_HEIGHT 720
-#define MOUSE_SENSITIVITY  0.1f
+#define MOUSE_SENSITIVITY  0.15f
 #define FOV           M_PI/2.5f
-//#define MAX_FPS       30
 
 int main(int argc, char** argv){
 	volatile int gameRunning = 1;
@@ -24,10 +23,10 @@ int main(int argc, char** argv){
 
 	window = SDL_CreateWindow("Software Rendering", 
 			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 	// x, y
-			WINDOW_WIDTH, WINDOW_HEIGHT, 						// Width, Height
+			WINDOW_WIDTH, WINDOW_HEIGHT, 					// Width, Height
 			0);													// Flags
 
-	renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_PRESENTVSYNC);
+	renderer = SDL_CreateRenderer(window, 0, 0);
 	
 	SDL_SetRelativeMouseMode(SDL_TRUE);
 
@@ -38,27 +37,29 @@ int main(int argc, char** argv){
 	Uint32 pixels[WINDOW_WIDTH * WINDOW_HEIGHT];
 
 	/* Create all game variables */
+	char* mapTiles = "01";
 
 	int mapWidth = 16,
 		mapHeight = 16;
 	char* gameMap;
-	gameMap = "################"
-		      "#..............#"
-		      "#.##........##.#"
-		      "#.#..........#.#"
-		      "#..............#"
-		      "#..............#"
-		      "#..............#"
-		      "#..............#"
-		      "#..............#"
-		      "#..............#"
-		      "#..............#"
-		      "#..............#"
-		      "#.#..........#.#"
-		      "#.##........##.#"
-		      "#..............#"
-		      "################";
-	float renderDistance = 16.0f;
+	gameMap = "0000000000000000"
+		      "0..............0"
+		      "0..............0"
+		      "0..............0"
+		      "0..............0"
+		      "...............0"
+		      "...............0"
+		      ".....11111111110"
+		      "...............0"
+		      "...............0"
+		      "...............0"
+		      "0..............0"
+		      "0..............0"
+		      "0..............0"
+		      "0..............0"
+		      "0000000000000000";
+
+	float renderDistance = 22.0f;
 
 	float playerAngle = 0.0f; // player angle
 	float playerX = 10.0f,
@@ -124,7 +125,7 @@ int main(int argc, char** argv){
 		if (keyboardState[SDL_SCANCODE_W]){ 
 			playerX += playerSinTime;
 			playerY += playerCosTime;
-			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '#'){
+			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '0'){
 				playerX -= playerSinTime;
 				playerY -= playerCosTime;
 			}
@@ -133,7 +134,7 @@ int main(int argc, char** argv){
 		if (keyboardState[SDL_SCANCODE_S]){ 
 			playerX -= playerSinTime;
 			playerY -= playerCosTime;
-			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '#'){
+			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '0'){
 				playerX += playerSinTime;
 				playerY += playerCosTime;
 			}
@@ -141,7 +142,7 @@ int main(int argc, char** argv){
 		if (keyboardState[SDL_SCANCODE_A]){ 
 			playerX -= playerCosTime;
 			playerY += playerSinTime;
-			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '#'){
+			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '0'){
 				playerX += playerCosTime;
 				playerY -= playerSinTime;
 			}
@@ -149,7 +150,7 @@ int main(int argc, char** argv){
 		if (keyboardState[SDL_SCANCODE_D]){ 
 			playerX += playerCosTime;
 			playerY -= playerSinTime;
-			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '#'){
+			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '0'){
 				playerX -= playerCosTime;
 				playerY += playerSinTime;
 			}
@@ -169,12 +170,18 @@ int main(int argc, char** argv){
 
 			float distanceToWall = 0.0f;
 			int hitWall = 0;
+			char wallTile;
 
 			float eyeX = sin(rayAngle);
 			float eyeY = cos(rayAngle);
 
 			while (!hitWall && distanceToWall < renderDistance) {
-
+				/* This calculates distance to the next wall.
+				 * At the moment this is done by brute force
+				 * which is not optimal.
+				 *
+				 * TODO: optimize this algorithm
+				 */
 				distanceToWall += 0.01f;
 
 				int testX = (int)(playerX + eyeX * distanceToWall);
@@ -185,9 +192,17 @@ int main(int argc, char** argv){
 					distanceToWall = renderDistance;
 				}
 				else {
-					if(gameMap[testY * mapWidth + testX] == '#') {
+					for (int i = 0; i < strlen(mapTiles); ++i) {
+						if (gameMap[testY * mapWidth + testX] == mapTiles[i]) {
+							hitWall = 1;
+							wallTile = mapTiles[i];
+						}
+					}
+					/*
+					if(gameMap[testY * mapWidth + testX] == '0') {
 						hitWall = 1;
 					}
+					*/
 				}
 			}
 
@@ -195,15 +210,23 @@ int main(int argc, char** argv){
 			int ceiling = (float)(WINDOW_HEIGHT / 2.0f) - WINDOW_HEIGHT / ((float)distanceToWall);
 			int floor = WINDOW_HEIGHT - ceiling;
 
-			Uint32 shade = 0xFF000000;
-			shade += 0x010101 * (int)(0xFF / (distanceToWall + 1.7f));
-
 			for (int y=0; y < WINDOW_HEIGHT; y++) {
 				if (y <= ceiling){
 					pixels[x + y * WINDOW_WIDTH] = 0xFF000000;
 				}
 				else if (y > ceiling && y <= floor) {
-					pixels[x + y * WINDOW_WIDTH] = shade;
+					switch (wallTile) {
+						 
+						case '0':
+							pixels[x + y * WINDOW_WIDTH] = 0xFF339933;
+							break;
+						case '1':
+							pixels[x + y * WINDOW_WIDTH] = 0xFF333399;
+							break;
+						default:
+							pixels[x + y * WINDOW_WIDTH] = 0xFF000000;
+							break;
+					}
 				}
 				else {
 					float b = (((float)y - WINDOW_HEIGHT / 2.0f) / 
@@ -231,11 +254,14 @@ int main(int argc, char** argv){
 		    fps = fps_; // the variable 'fps' is displayed 
 		    fps_ = 0;
 
+			/*
 			char windowTitle[32] = "Software Rendering | FPS: ";
 			char buffer[20];
 			SDL_itoa(fps, buffer, 10);
 			strcat(windowTitle, buffer);
 			SDL_SetWindowTitle(window, windowTitle);
+			*/
+			printf("%i\n", fps);
 		}
 	}
 
