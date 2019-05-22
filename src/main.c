@@ -1,13 +1,24 @@
+/* Written by Fabian Beskow (c) 2019
+ *
+ * This is a small pseudo-3D ray-casting engine 
+ * written in purley C and SDL2.
+ */
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <math.h>
 
-#define WINDOW_WIDTH  1280
+#define WINDOW_WIDTH  1270
 #define WINDOW_HEIGHT 720
-#define MOUSE_SENSITIVITY  0.15f
+#define MOUSE_SENSITIVITY  0.10f
 #define FOV           M_PI/2.5f
+
+typedef struct gameMap {
+	int width, 
+		height;
+	char* tileSet; 
+	char* tileMap;
+}gameMap;
 
 int main(int argc, char** argv){
 	volatile int gameRunning = 1;
@@ -26,7 +37,7 @@ int main(int argc, char** argv){
 			WINDOW_WIDTH, WINDOW_HEIGHT, 					// Width, Height
 			0);													// Flags
 
-	renderer = SDL_CreateRenderer(window, 0, 0);
+	renderer = SDL_CreateRenderer(window, 0, 0);//SDL_RENDERER_PRESENTVSYNC);
 	
 	SDL_SetRelativeMouseMode(SDL_TRUE);
 
@@ -37,29 +48,34 @@ int main(int argc, char** argv){
 	Uint32 pixels[WINDOW_WIDTH * WINDOW_HEIGHT];
 
 	/* Create all game variables */
-	char* mapTiles = "01";
 
-	int mapWidth = 16,
-		mapHeight = 16;
-	char* gameMap;
-	gameMap = "0000000000000000"
-		      "0..............0"
-		      "0..............0"
-		      "0..............0"
-		      "0..............0"
-		      "...............0"
-		      "...............0"
-		      ".....11111111110"
-		      "...............0"
-		      "...............0"
-		      "...............0"
-		      "0..............0"
-		      "0..............0"
-		      "0..............0"
-		      "0..............0"
-		      "0000000000000000";
+	gameMap map;
+	map.width = 40;
+	map.height = 20;
 
-	float renderDistance = 22.0f;
+	map.tileSet = 	"019";
+	map.tileMap =	"0000000000000000000000000000000000000000"
+					"0....................0.............1...0"
+					"0.............0......0.............0...9"
+					"0.............0......0.............0...9"
+					"0.............0....................0...0"
+					"0000111110000000000000000000000011000000"
+					"0.........0............................0"
+					"0.........0............................0"
+					"0.........0............................0"
+					"0.........0.........0..................0"
+					"0.........0.........0..................0"
+					"0.........0.........0..................0"
+					"0.........0.........0..................0"
+					"0.....000000000.....0..................0"
+					"0...................0..................0"
+					"0...................0..................0"
+					"0...................0..................0"
+					"0...................0..................0"
+					"0...................0..................0"
+					"0000000000000000000000000000000000000000";
+
+	float renderDistance = 60.0f;
 
 	float playerAngle = 0.0f; // player angle
 	float playerX = 10.0f,
@@ -75,7 +91,7 @@ int main(int argc, char** argv){
 	while (gameRunning) {
 		/* == Main Game Loop ==
 		 *
-		 * Pipeline is in the order of:
+		 * The loop follows this order:
 		 *
 		 * Input:
 		 *   Events,
@@ -122,10 +138,11 @@ int main(int argc, char** argv){
 		float playerSinTime = playerSpeed * sin(playerAngle) * elapsedTime;
 		float playerCosTime = playerSpeed * cos(playerAngle) * elapsedTime;
 
+		// TODO: Create a function to check if player is in wall
 		if (keyboardState[SDL_SCANCODE_W]){ 
 			playerX += playerSinTime;
 			playerY += playerCosTime;
-			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '0'){
+			if (map.tileMap[(int)playerY * map.width + (int)playerX] == '0'){
 				playerX -= playerSinTime;
 				playerY -= playerCosTime;
 			}
@@ -134,7 +151,7 @@ int main(int argc, char** argv){
 		if (keyboardState[SDL_SCANCODE_S]){ 
 			playerX -= playerSinTime;
 			playerY -= playerCosTime;
-			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '0'){
+			if (map.tileMap[(int)playerY * map.width + (int)playerX] == '0'){
 				playerX += playerSinTime;
 				playerY += playerCosTime;
 			}
@@ -142,7 +159,7 @@ int main(int argc, char** argv){
 		if (keyboardState[SDL_SCANCODE_A]){ 
 			playerX -= playerCosTime;
 			playerY += playerSinTime;
-			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '0'){
+			if (map.tileMap[(int)playerY * map.width + (int)playerX] == '0'){
 				playerX += playerCosTime;
 				playerY -= playerSinTime;
 			}
@@ -150,7 +167,7 @@ int main(int argc, char** argv){
 		if (keyboardState[SDL_SCANCODE_D]){ 
 			playerX += playerCosTime;
 			playerY -= playerSinTime;
-			if (gameMap[(int)playerY * mapWidth + (int)playerX] == '0'){
+			if (map.tileMap[(int)playerY * map.width + (int)playerX] == '0'){
 				playerX -= playerCosTime;
 				playerY += playerSinTime;
 			}
@@ -175,34 +192,41 @@ int main(int argc, char** argv){
 			float eyeX = sin(rayAngle);
 			float eyeY = cos(rayAngle);
 
-			while (!hitWall && distanceToWall < renderDistance) {
-				/* This calculates distance to the next wall.
-				 * At the moment this is done by brute force
-				 * which is not optimal.
+			float testX = playerX;
+			float testY = playerY;
+			while (!hitWall && fabsf(distanceToWall) < renderDistance) {
+				/* == The actual wall finding algorithm ==
 				 *
-				 * TODO: optimize this algorithm
+				 * This algorithm now checks every square of the map
+				 * instead of checking in intervals
 				 */
-				distanceToWall += 0.01f;
 
-				int testX = (int)(playerX + eyeX * distanceToWall);
-				int testY = (int)(playerY + eyeY * distanceToWall);
+				float deltaTestX = testX - floorf(testX);
+				float deltaTestY = testY - floorf(testY);
 
-				if (testX < 0 || testX >= mapWidth || testY < 0 || testY >= mapHeight){
+				float targetX = eyeX < 0.0f ? 0.0f : 1.0f; 
+				float targetY = eyeY < 0.0f ? 0.0f : 1.0f;
+
+				float distanceToWallX = (targetX - deltaTestX) / eyeX + 0.0001f;
+				float distanceToWallY = (targetY - deltaTestY) / eyeY + 0.0001f;
+
+				distanceToWall += distanceToWallX < distanceToWallY ? distanceToWallX : distanceToWallY;
+				testX = playerX + distanceToWall * eyeX; 
+				testY = playerY + distanceToWall * eyeY; 
+
+
+				if (testX < 0 || testX >= map.width || testY < 0 || testY >= map.height){
 					hitWall = 1;
+					wallTile = ' ';
 					distanceToWall = renderDistance;
 				}
 				else {
-					for (int i = 0; i < strlen(mapTiles); ++i) {
-						if (gameMap[testY * mapWidth + testX] == mapTiles[i]) {
+					for (int i = 0; i < strlen(map.tileSet); ++i) {
+						if (map.tileMap[(int)testY * map.width + (int)testX] == map.tileSet[i]) {
 							hitWall = 1;
-							wallTile = mapTiles[i];
+							wallTile = map.tileSet[i];
 						}
 					}
-					/*
-					if(gameMap[testY * mapWidth + testX] == '0') {
-						hitWall = 1;
-					}
-					*/
 				}
 			}
 
@@ -222,6 +246,9 @@ int main(int argc, char** argv){
 							break;
 						case '1':
 							pixels[x + y * WINDOW_WIDTH] = 0xFF333399;
+							break;
+						case '9':
+							pixels[x + y * WINDOW_WIDTH] = 0xFF993333;
 							break;
 						default:
 							pixels[x + y * WINDOW_WIDTH] = 0xFF000000;
@@ -265,5 +292,7 @@ int main(int argc, char** argv){
 		}
 	}
 
+	SDL_DestroyTexture(frameBuffer);
+	SDL_DestroyWindow(window);
 	SDL_Quit();
 }
