@@ -37,7 +37,7 @@ int main(int argc, char** argv){
 			WINDOW_WIDTH, WINDOW_HEIGHT, 					// Width, Height
 			0);													// Flags
 
-	renderer = SDL_CreateRenderer(window, 0, 0);//SDL_RENDERER_PRESENTVSYNC);
+	renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_PRESENTVSYNC);
 	
 	SDL_SetRelativeMouseMode(SDL_TRUE);
 
